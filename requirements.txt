@@ -1,0 +1,7 @@
+SQLAlchemy==2.0.43
+fastapi==0.117.1
+pydantic-settings
+python-dotenv
+uvicorn
+passlib[bcrypt]
+python-jose[cryptography]
