@@ -16,6 +16,10 @@ class SubscriptionRead(SubscriptionBase):
     id: int
     model_config = {"from_attributes": True}
     
+class SubscriptionDelete(BaseModel):
+    id: int
+    model_config = {"from_attributes": True}
+    
 class UserCreate(BaseModel):
     email: str
     password: str

@@ -1,8 +1,10 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, select, func
 from .models import Subscription, User
 from .schemas import SubscriptionCreate, UserCreate
 from .security import get_password_hash
 
+# Subscription CRUD operations
 def create_subscription(
     db: Session, 
     subscription: SubscriptionCreate, 
@@ -17,28 +19,29 @@ def create_subscription(
     db.refresh(db_subscription)
     return db_subscription
 
-def get_user_subscriptions(
-    db: Session,
-    user_id: int
-):
-    return db.query(Subscription).filter(Subscription.user_id == user_id).all()
+def get_user_subscriptions(db: Session, user_id: int):
+    query = select(Subscription).where(Subscription.user_id == user_id)
+    return db.execute(query).scalars().all()
 
-def delete_subscription(
-    db: Session, 
-    sub_id: int
-):
-    db_sub = db.query(Subscription).filter(Subscription.id == sub_id).first()
+def delete_subscription(db: Session, sub_id: int, user_id: int):
+    query = select(Subscription).where(and_(
+        Subscription.id == sub_id, 
+        Subscription.user_id == user_id
+    ))
+    db_sub = db.execute(query).scalar_one_or_none()
+    
     if db_sub:
         db.delete(db_sub)
         db.commit()
-    return db_sub
+        return db_sub
+    return None
 
-def get_user_by_email(db: Session, email: str):
-    return db.query(User).filter(User.email == email).first()
+def get_user_total_subscription_cost(db: Session, user_id: int):
+    query = select(func.sum(Subscription.price)).where(Subscription.user_id == user_id)
+    total_cost = db.execute(query).scalar()
+    return total_cost or 0.0
 
-def get_user_by_name(db: Session, name: str):
-    return db.query(User).filter(User.name == name).first()
-
+# User CRUD operations
 def create_user(db: Session, user: UserCreate):
     hashed_password = get_password_hash(user.password)
     
@@ -51,3 +54,11 @@ def create_user(db: Session, user: UserCreate):
     db.commit()
     db.refresh(db_user)
     return db_user
+
+def get_user_by_email(db: Session, email: str):
+    query = select(User).where(User.email == email)
+    return db.execute(query).scalar_one_or_none()
+
+def get_user_by_nickname(db: Session, name: str):
+    query = select(User).where(User.name == name)
+    return db.execute(query).scalar_one_or_none()
