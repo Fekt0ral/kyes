@@ -10,7 +10,7 @@ from .database import get_db
 from . import crud
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
@@ -30,8 +30,8 @@ def create_access_token(data: dict):
     return encoded_jwt
 
 async def get_current_user(
-    db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

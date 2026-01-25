@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, select, func
+from sqlalchemy import select, func
 from .models import Subscription, User
 from .schemas import SubscriptionCreate, UserCreate
 from .security import get_password_hash
@@ -24,10 +24,10 @@ def get_user_subscriptions(db: Session, user_id: int):
     return db.execute(query).scalars().all()
 
 def delete_subscription(db: Session, sub_id: int, user_id: int):
-    query = select(Subscription).where(and_(
+    query = select(Subscription).where(
         Subscription.id == sub_id, 
         Subscription.user_id == user_id
-    ))
+    )
     db_sub = db.execute(query).scalar_one_or_none()
     
     if db_sub:
@@ -40,6 +40,19 @@ def get_user_total_subscription_cost(db: Session, user_id: int):
     query = select(func.sum(Subscription.price)).where(Subscription.user_id == user_id)
     total_cost = db.execute(query).scalar()
     return total_cost or 0.0
+
+def get_user_expenses_by_all_categories(db: Session, user_id: int):
+    query = (
+        select(
+            Subscription.category, 
+            func.sum(Subscription.price).label("total")
+        )
+        .where(Subscription.user_id == user_id)
+        .group_by(Subscription.category)
+    )
+    result = db.execute(query).all()
+    
+    return [{"category": row[0], "category_sum": row[1]} for row in result]
 
 # User CRUD operations
 def create_user(db: Session, user: UserCreate):

@@ -20,7 +20,7 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True)
     service_name = Column(String, nullable=False)
     price = Column(Float, nullable=False)
-    currency = Column(String, nullable=False)
+    currency = Column(String, nullable=False, default="Rub")
     next_payment = Column(Date, nullable=False)
     category = Column(String, nullable=True)
     

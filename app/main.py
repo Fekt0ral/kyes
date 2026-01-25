@@ -18,5 +18,5 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-app.include_router(subscriptions.router, prefix="/subs", tags=["Subscriptions"])
-app.include_router(users.router, prefix="/auth", tags=["Authentication"])
+app.include_router(subscriptions.router)
+app.include_router(users.router)
