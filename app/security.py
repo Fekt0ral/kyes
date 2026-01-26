@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
 from jose import jwt
+from pwdlib import PasswordHash
 from config import settings
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -9,14 +9,14 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from . import crud
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+password_hash = PasswordHash.recommended()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return password_hash.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return password_hash.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict):
     to_encode = data.copy()
