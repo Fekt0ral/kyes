@@ -90,7 +90,7 @@ async def get_category_expenses_report(
         "total_monthly": round(total_monthly, 2)
     }
 
-@router.delete("/{sub_id}", response_model=schemas.SubscriptionDelete)
+@router.delete("/{sub_id}", status_code=204)
 def delete_subscription(
     sub_id: int,
     db: DBSession,
@@ -98,7 +98,7 @@ def delete_subscription(
 ):
     db_sub = crud.delete_subscription(db=db, sub_id=sub_id, user_id=current_user.id)
     
-    if db_sub is None:
+    if not db_sub:
         raise HTTPException(status_code=404, detail="Subscription not found or access denied")
     
-    return db_sub
+    return None
