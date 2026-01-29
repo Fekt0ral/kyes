@@ -7,3 +7,5 @@ pwdlib[argon2]
 python-jose[cryptography]
 httpx
 pytest
+celery
+redis

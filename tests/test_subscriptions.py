@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, StaticPool
 from sqlalchemy.orm import sessionmaker
-from datetime import date
+from datetime import date, timedelta
 
 from app.main import app
 from app.database import get_db
@@ -147,3 +147,85 @@ def test_delete_and_security_trick(client, session, auth_headers):
 
     # Важно: при 204 тело ответа пустое, поэтому не пытайся делать .json()
     assert success_resp.text == ""
+    
+def test_update_subscription_success(client, auth_headers):
+    # 1. Создаем подписку
+    payload = {
+        "service_name": "Netflix",
+        "price": 10.0,
+        "currency": "USD",
+        "next_payment": "2026-02-01",
+        "category": "Cinema"
+    }
+    create_res = client.post("/subs/", json=payload, headers=auth_headers)
+    sub_id = create_res.json()["id"]
+
+    # 2. Обновляем ТОЛЬКО цену
+    update_payload = {"price": 15.0}
+    patch_res = client.patch(f"/subs/{sub_id}", json=update_payload, headers=auth_headers)
+    
+    assert patch_res.status_code == 200
+    data = patch_res.json()
+    
+    # Проверяем, что цена изменилась
+    assert data["price"] == 15.0
+    # Проверяем, что остальные поля остались прежними (не стали None)
+    assert data["service_name"] == "Netflix"
+    assert data["currency"] == "USD"
+    assert data["category"] == "Cinema"
+    
+def test_update_subscription_unauthorized(client, session, auth_headers):
+    # 1. Создаем подписку первым пользователем
+    payload = {"service_name": "MySub", "price": 100, "currency": "RUB", "next_payment": "2026-02-01"}
+    sub_id = client.post("/subs/", json=payload, headers=auth_headers).json()["id"]
+
+    # 2. Создаем второго пользователя ("хакера")
+    hacker_email = "hacker@test.com"
+    from app.security import get_password_hash
+    db_hacker = models.User(email=hacker_email, name="Hacker", hashed_password=get_password_hash("Pass!123"))
+    session.add(db_hacker)
+    session.commit()
+    
+    token = security.create_access_token(data={"sub": hacker_email})
+    hacker_headers = {"Authorization": f"Bearer {token}"}
+
+    # 3. Пытаемся обновить чужую подписку
+    patch_res = client.patch(f"/subs/{sub_id}", json={"price": 1.0}, headers=hacker_headers)
+    
+    assert patch_res.status_code == 404
+    assert patch_res.json()["detail"] == "Subscription not found"
+    
+def test_create_subscription_past_date(client, auth_headers):
+    # Дата вчерашним днем
+    past_date = date.today() - timedelta(days=1)
+    
+    payload = {
+        "service_name": "Old Service",
+        "price": 100.0,
+        "currency": "RUB",
+        "next_payment": str(past_date)
+    }
+    
+    response = client.post("/subs/", json=payload, headers=auth_headers)
+    
+    # Ждем 422 Unprocessable Entity
+    assert response.status_code == 422
+    assert "Дата платежа не может быть в прошлом" in response.json()["detail"]
+
+def test_update_subscription_past_date(client, auth_headers):
+    # 1. Сначала создаем нормальную подписку
+    payload = {
+        "service_name": "Future Service",
+        "price": 100.0,
+        "currency": "RUB",
+        "next_payment": str(date.today() + timedelta(days=5))
+    }
+    res = client.post("/subs/", json=payload, headers=auth_headers)
+    sub_id = res.json()["id"]
+    
+    # 2. Пытаемся обновить её на прошедшую дату
+    past_date = date.today() - timedelta(days=1)
+    response = client.patch(f"/subs/{sub_id}", json={"next_payment": str(past_date)}, headers=auth_headers)
+    
+    assert response.status_code == 422
+    assert "Дата платежа не может быть в прошлом" in response.json()["detail"]

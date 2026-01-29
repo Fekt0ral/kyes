@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from .models import Subscription, User
-from .schemas import SubscriptionCreate, UserCreate
+from .schemas import SubscriptionCreate, UserCreate, SubscriptionUpdate
 from .security import get_password_hash
 
 # Subscription CRUD operations
@@ -22,6 +22,24 @@ def create_subscription(
 def get_user_subscriptions(db: Session, user_id: int):
     query = select(Subscription).where(Subscription.user_id == user_id)
     return db.execute(query).scalars().all()
+
+def update_subscription(db: Session, sub_id: int, user_id: int, update_data: SubscriptionUpdate):
+    query = select(Subscription).where(
+        Subscription.id == sub_id, 
+        Subscription.user_id == user_id
+    )
+    db_sub = db.execute(query).scalar_one_or_none()
+    
+    if db_sub:
+        obj_data = update_data.model_dump(exclude_unset=True)
+        for key, value in obj_data.items():
+            setattr(db_sub, key, value)
+        
+        db.commit()
+        db.refresh(db_sub)
+        return db_sub
+    
+    return None
 
 def delete_subscription(db: Session, sub_id: int, user_id: int):
     query = select(Subscription).where(

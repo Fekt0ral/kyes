@@ -89,6 +89,27 @@ async def get_category_expenses_report(
         "services": filtered_subs,
         "total_monthly": round(total_monthly, 2)
     }
+    
+@router.patch("/{sub_id}", response_model=schemas.SubscriptionRead)
+def update_subscription_route(
+    sub_id: int,
+    update_data: schemas.SubscriptionUpdate,
+    db: DBSession,
+    current_user: CurUser,
+    rates: Rates
+):
+    db_sub = crud.update_subscription(
+        db=db, 
+        sub_id=sub_id, 
+        user_id=current_user.id, 
+        update_data=update_data
+    )
+    
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    
+    db_sub.price_rub = convert_to_rub(db_sub.price, db_sub.currency, rates)
+    return db_sub
 
 @router.delete("/{sub_id}", status_code=204)
 def delete_subscription(

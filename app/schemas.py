@@ -10,6 +10,31 @@ class SubscriptionBase(BaseModel):
     currency: Literal["RUB", "USD", "EUR"] = "RUB"
     next_payment: date
     category: Optional[str] = None
+    
+    @field_validator("service_name")
+    @classmethod
+    def validate_service_name(cls, v: str):
+        name = v.strip()
+        if not (2 <= len(name) <= 100):
+            raise ValueError("Service name must be between 2 and 100 characters long.")
+        return name
+    
+    @field_validator("next_payment") # на фронте потом можно сделать минимальную дату сегодня
+    @classmethod
+    def validate_next_payment(cls, v: date):
+        if v < date.today():
+            raise ValueError("Incorrect date: next payment must be today or in the future.")
+        return v
+    
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: Optional[str]):
+        if v:
+            category = v.strip()
+            if not (2 <= len(category) <= 50):
+                raise ValueError("Category must be between 2 and 50 characters long.")
+            return category
+        return v
 
 class SubscriptionCreate(SubscriptionBase):
     pass
@@ -18,6 +43,13 @@ class SubscriptionRead(SubscriptionBase):
     id: int
     price_rub: float = 0.0
     model_config = {"from_attributes": True}
+    
+class SubscriptionUpdate(BaseModel):
+    service_name: Optional[str] = None
+    price: Optional[float] = Field(None, gt=0)
+    currency: Optional[Literal["RUB", "USD", "EUR"]] = None
+    next_payment: Optional[date] = None
+    category: Optional[str] = None
     
 class CategoryStat(BaseModel):
     category: str
@@ -46,6 +78,7 @@ class UserCreate(BaseModel):
     name: str 
 
     @field_validator("email")
+    @classmethod
     def validate_email(cls, v):
         pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
         email = v.strip()
@@ -54,6 +87,7 @@ class UserCreate(BaseModel):
         return email
 
     @field_validator("password")
+    @classmethod
     def validate_password(cls, v):
         pattern = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,30}$"
         password = v.strip()
@@ -66,6 +100,7 @@ class UserCreate(BaseModel):
         return password
     
     @field_validator("name")
+    @classmethod
     def validate_name(cls, v):
         pattern = r"^(?=.*[a-zA-Zа-яА-Я])[a-zA-Zа-яА-Я0-9\s-]{2,50}$"
         name = v.strip()
