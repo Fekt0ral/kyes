@@ -5,12 +5,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 from ..database import get_db
 from .. import schemas, crud, security
 
-router = APIRouter(tags=["users"])
+router = APIRouter(prefix="/auth", tags=["users"])
 
 DBSession = Annotated[Session, Depends(get_db)]
 
 @router.post("/register", response_model=schemas.UserRead)
-def register_user(
+def register(
     user: schemas.UserCreate, 
     db: DBSession
 ):

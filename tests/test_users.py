@@ -115,7 +115,7 @@ def test_register_user_success(client):
     # Делаем POST запрос на /register (префикс тега users, но путь может быть /register)
     # В твоем файле users.py роутер не имеет префикса, но подключен в main.
     # Допустим, путь просто /register
-    response = client.post("/register", json=payload)
+    response = client.post("/auth/register", json=payload)
     
     # Проверяем статус 200 OK
     assert response.status_code == 200
@@ -133,10 +133,10 @@ def test_register_duplicate_email(client):
         "name": "User One"
     }
     # Создаем первого пользователя
-    client.post("/register", json=payload)
+    client.post("/auth/register", json=payload)
     
     # Пытаемся создать второго с ТЕМ ЖЕ email
-    response = client.post("/register", json=payload)
+    response = client.post("/auth/register", json=payload)
     
     # Ожидаем 400 Bad Request
     assert response.status_code == 400
@@ -144,14 +144,14 @@ def test_register_duplicate_email(client):
 
 def test_register_duplicate_nickname(client):
     # Первый пользователь
-    client.post("/register", json={
+    client.post("/auth/register", json={
         "email": "user1@example.com",
         "password": "StrongPassword1!",
         "name": "SuperUser"
     })
     
     # Второй пользователь: другой email, но ТОТ ЖЕ никнейм
-    response = client.post("/register", json={
+    response = client.post("/auth/register", json={
         "email": "user2@example.com",
         "password": "StrongPassword1!",
         "name": "SuperUser" # Дубль
@@ -164,7 +164,7 @@ def test_login_success(client):
     # 1. Сначала регистрируем
     email = "login@example.com"
     password = "MySuperPassword1!"
-    client.post("/register", json={
+    client.post("/auth/register", json={
         "email": email,
         "password": password,
         "name": "Login User"
@@ -179,7 +179,7 @@ def test_login_success(client):
         "password": password
     }
     
-    response = client.post("/login", data=login_data)
+    response = client.post("/auth/login", data=login_data)
     
     assert response.status_code == 200
     token_data = response.json()
@@ -190,14 +190,14 @@ def test_login_success(client):
 
 def test_login_wrong_password(client):
     # Регистрируем
-    client.post("/register", json={
+    client.post("/auth/register", json={
         "email": "wrong@example.com",
         "password": "CorrectPassword1!",
         "name": "WrongPassUser"
     })
     
     # Ломимся с неправильным паролем
-    response = client.post("/login", data={
+    response = client.post("/auth/login", data={
         "username": "WrongPassUser",
         "password": "WrongPassword1!" 
     })

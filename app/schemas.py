@@ -11,30 +11,40 @@ class SubscriptionBase(BaseModel):
     next_payment: date
     category: Optional[str] = None
     
-    @field_validator("service_name")
     @classmethod
-    def validate_service_name(cls, v: str):
+    def _validate_service_name(cls, v: str):
         name = v.strip()
         if not (2 <= len(name) <= 100):
             raise ValueError("Service name must be between 2 and 100 characters long.")
         return name
     
-    @field_validator("next_payment") # на фронте потом можно сделать минимальную дату сегодня
     @classmethod
-    def validate_next_payment(cls, v: date):
+    def _validate_date(cls, v: date):
         if v < date.today():
             raise ValueError("Incorrect date: next payment must be today or in the future.")
         return v
     
+    @classmethod
+    def _validate_category(cls, v: str):
+        category = v.strip()
+        if not (2 <= len(category) <= 50):
+            raise ValueError("Category must be between 2 and 50 characters long.")
+        return category
+    
+    @field_validator("service_name")
+    @classmethod
+    def validate_service_name(cls, v: str):
+        return cls._validate_service_name(v)
+    
+    @field_validator("next_payment") # на фронте потом можно сделать минимальную дату сегодня
+    @classmethod
+    def validate_next_payment(cls, v: date):
+        return cls._validate_date(v)
+    
     @field_validator("category")
     @classmethod
     def validate_category(cls, v: Optional[str]):
-        if v:
-            category = v.strip()
-            if not (2 <= len(category) <= 50):
-                raise ValueError("Category must be between 2 and 50 characters long.")
-            return category
-        return v
+        return cls._validate_category(v) if v else v
 
 class SubscriptionCreate(SubscriptionBase):
     pass
@@ -51,6 +61,21 @@ class SubscriptionUpdate(BaseModel):
     next_payment: Optional[date] = None
     category: Optional[str] = None
     
+    @field_validator("service_name")
+    @classmethod
+    def validate_service_name(cls, v: Optional[str]):
+        return SubscriptionBase._validate_service_name(v) if v else v
+    
+    @field_validator("next_payment")
+    @classmethod
+    def validate_next_payment(cls, v: Optional[date]):
+        return SubscriptionBase._validate_date(v) if v else v
+    
+    @field_validator("category")
+    @classmethod
+    def validate_category(cls, v: Optional[str]):
+        return SubscriptionBase._validate_category(v) if v else v
+    
 class CategoryStat(BaseModel):
     category: str
     category_sum: float
@@ -58,8 +83,8 @@ class CategoryStat(BaseModel):
 
 class CategoryReport(BaseModel):
     category: str
-    services: List[SubscriptionRead]
     total_monthly: float
+    services: List[SubscriptionRead]
 
 class AllCategoriesReport(BaseModel):
     total_monthly: float

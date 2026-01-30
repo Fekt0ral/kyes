@@ -10,7 +10,7 @@ from .database import get_db
 from . import crud
 
 password_hash = PasswordHash.recommended()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def get_password_hash(password: str) -> str:
     return password_hash.hash(password)

@@ -90,29 +90,29 @@ def test_create_subscription_api(client, auth_headers):
         "next_payment": str(date.today()),
         "category": "Music"
     }
-    response = client.post("/subs/", json=payload, headers=auth_headers)
+    response = client.post("/subscriptions/", json=payload, headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["service_name"] == "Spotify"
 
 def test_get_subs_and_report(client, auth_headers):
     # Создаем две подписки через API
-    client.post("/subs/", json={"service_name": "S1", "price": 100, "currency": "RUB", "next_payment": "2025-01-01", "category": "Work"}, headers=auth_headers)
-    client.post("/subs/", json={"service_name": "S2", "price": 10, "currency": "USD", "next_payment": "2025-01-01", "category": "Work"}, headers=auth_headers)
+    client.post("/subscriptions/", json={"service_name": "S1", "price": 100, "currency": "RUB", "next_payment": str(date.today()), "category": "Work"}, headers=auth_headers)
+    client.post("/subscriptions/", json={"service_name": "S2", "price": 10, "currency": "USD", "next_payment": str(date.today()), "category": "Work"}, headers=auth_headers)
     
     # 1. Проверяем список
-    resp_list = client.get("/subs/", headers=auth_headers)
+    resp_list = client.get("/subscriptions/", headers=auth_headers)
     assert len(resp_list.json()) == 2
     # Проверяем, что цена в рублях рассчиталась (100 + 10*100 = 1100)
     assert resp_list.json()[1]["price_rub"] == 1000.0
 
     # 2. Проверяем общий отчет
-    resp_report = client.get("/subs/report", headers=auth_headers)
+    resp_report = client.get("/subscriptions/reports/summary", headers=auth_headers)
     assert resp_report.json()["total_monthly"] == 1100.0
 
 def test_delete_and_security_trick(client, session, auth_headers):
     # 1. Создаем подписку первого (основного) пользователя
-    sub_payload = {"service_name": "DeleteMe", "price": 1, "currency": "RUB", "next_payment": "2025-01-01"}
-    sub_res = client.post("/subs/", json=sub_payload, headers=auth_headers).json()
+    sub_payload = {"service_name": "DeleteMe", "price": 1, "currency": "RUB", "next_payment": str(date.today())}
+    sub_res = client.post("/subscriptions/", json=sub_payload, headers=auth_headers).json()
     sub_id = sub_res["id"]
 
     # 2. РЕГИСТРИРУЕМ второго пользователя в базе (чтобы он существовал)
@@ -133,14 +133,14 @@ def test_delete_and_security_trick(client, session, auth_headers):
     
     # 4. Теперь он авторизован (пройдет 401), но подписка не его
     # crud.delete_subscription вернет None, и роутер выдаст 404
-    fail_resp = client.delete(f"/subs/{sub_id}", headers=other_headers)
+    fail_resp = client.delete(f"/subscriptions/{sub_id}", headers=other_headers)
     
     # Теперь этот ассерт сработает правильно
     assert fail_resp.status_code == 404 
     assert fail_resp.json()["detail"] == "Subscription not found or access denied"
     
     # Удаляем подписку законным владельцем
-    success_resp = client.delete(f"/subs/{sub_id}", headers=auth_headers)
+    success_resp = client.delete(f"/subscriptions/{sub_id}", headers=auth_headers)
 
     # Теперь мы ждем 204 (No Content), а не 200
     assert success_resp.status_code == 204 
@@ -157,12 +157,12 @@ def test_update_subscription_success(client, auth_headers):
         "next_payment": "2026-02-01",
         "category": "Cinema"
     }
-    create_res = client.post("/subs/", json=payload, headers=auth_headers)
+    create_res = client.post("/subscriptions/", json=payload, headers=auth_headers)
     sub_id = create_res.json()["id"]
 
     # 2. Обновляем ТОЛЬКО цену
     update_payload = {"price": 15.0}
-    patch_res = client.patch(f"/subs/{sub_id}", json=update_payload, headers=auth_headers)
+    patch_res = client.patch(f"/subscriptions/{sub_id}", json=update_payload, headers=auth_headers)
     
     assert patch_res.status_code == 200
     data = patch_res.json()
@@ -177,7 +177,7 @@ def test_update_subscription_success(client, auth_headers):
 def test_update_subscription_unauthorized(client, session, auth_headers):
     # 1. Создаем подписку первым пользователем
     payload = {"service_name": "MySub", "price": 100, "currency": "RUB", "next_payment": "2026-02-01"}
-    sub_id = client.post("/subs/", json=payload, headers=auth_headers).json()["id"]
+    sub_id = client.post("/subscriptions/", json=payload, headers=auth_headers).json()["id"]
 
     # 2. Создаем второго пользователя ("хакера")
     hacker_email = "hacker@test.com"
@@ -190,7 +190,7 @@ def test_update_subscription_unauthorized(client, session, auth_headers):
     hacker_headers = {"Authorization": f"Bearer {token}"}
 
     # 3. Пытаемся обновить чужую подписку
-    patch_res = client.patch(f"/subs/{sub_id}", json={"price": 1.0}, headers=hacker_headers)
+    patch_res = client.patch(f"/subscriptions/{sub_id}", json={"price": 1.0}, headers=hacker_headers)
     
     assert patch_res.status_code == 404
     assert patch_res.json()["detail"] == "Subscription not found"
@@ -206,11 +206,11 @@ def test_create_subscription_past_date(client, auth_headers):
         "next_payment": str(past_date)
     }
     
-    response = client.post("/subs/", json=payload, headers=auth_headers)
+    response = client.post("/subscriptions/", json=payload, headers=auth_headers)
     
     # Ждем 422 Unprocessable Entity
     assert response.status_code == 422
-    assert "Дата платежа не может быть в прошлом" in response.json()["detail"]
+    assert "Value error, Incorrect date: next payment must be today or in the future." in response.json()["detail"]
 
 def test_update_subscription_past_date(client, auth_headers):
     # 1. Сначала создаем нормальную подписку
@@ -220,12 +220,12 @@ def test_update_subscription_past_date(client, auth_headers):
         "currency": "RUB",
         "next_payment": str(date.today() + timedelta(days=5))
     }
-    res = client.post("/subs/", json=payload, headers=auth_headers)
+    res = client.post("/subscriptions/", json=payload, headers=auth_headers)
     sub_id = res.json()["id"]
     
     # 2. Пытаемся обновить её на прошедшую дату
     past_date = date.today() - timedelta(days=1)
-    response = client.patch(f"/subs/{sub_id}", json={"next_payment": str(past_date)}, headers=auth_headers)
+    response = client.patch(f"/subscriptions/{sub_id}", json={"next_payment": str(past_date)}, headers=auth_headers)
     
     assert response.status_code == 422
-    assert "Дата платежа не может быть в прошлом" in response.json()["detail"]
+    assert "Value error, Incorrect date: next payment must be today or in the future." in response.json()["detail"]

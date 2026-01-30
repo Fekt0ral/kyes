@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
+
+from .currency import convert_to_rub
 from .models import Subscription, User
 from .schemas import SubscriptionCreate, UserCreate, SubscriptionUpdate
 from .security import get_password_hash
@@ -23,6 +25,13 @@ def get_user_subscriptions(db: Session, user_id: int):
     query = select(Subscription).where(Subscription.user_id == user_id)
     return db.execute(query).scalars().all()
 
+def get_user_subscriptions_by_category(db: Session, user_id: int, category: str):
+    query = select(Subscription).where(
+        Subscription.user_id == user_id,
+        Subscription.category == category
+    )
+    return db.execute(query).scalars().all()
+
 def update_subscription(db: Session, sub_id: int, user_id: int, update_data: SubscriptionUpdate):
     query = select(Subscription).where(
         Subscription.id == sub_id, 
@@ -40,6 +49,20 @@ def update_subscription(db: Session, sub_id: int, user_id: int, update_data: Sub
         return db_sub
     
     return None
+
+def get_category_average(db: Session, category: str, rates: dict):
+    query = select(Subscription).where(Subscription.category == category)
+    subs = db.execute(query).scalars().all()
+
+    if not subs:
+        return 0.0
+
+    total_sum = 0.0
+    for sub in subs:
+        price_in_rub = convert_to_rub(sub.price, sub.currency, rates)
+        total_sum += price_in_rub
+
+    return round(total_sum / len(subs), 2)
 
 def delete_subscription(db: Session, sub_id: int, user_id: int):
     query = select(Subscription).where(

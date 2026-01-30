@@ -22,11 +22,12 @@ app = FastAPI(
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_, exc):
-    error = exc.errors()[0]
-    msg = error[0]['msg'] if error else "Validation error"
+    errors = exc.errors()
+    error = errors[0].get("msg") if errors else "Validation error"
+    
     return JSONResponse(
         status_code=422, #unprocessable entity
-        content={"detail": msg}
+        content={"detail": error}
     )
 
 app.include_router(subscriptions.router)

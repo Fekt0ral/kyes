@@ -5,7 +5,7 @@ from ..database import get_db
 from ..currency import get_rates, convert_to_rub
 from .. import schemas, models, crud, security
 
-router = APIRouter(prefix="/subs", tags=["subscriptions"])
+router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 CurUser = Annotated[models.User, Depends(security.get_current_user)]
 DBSession = Annotated[Session, Depends(get_db)]
@@ -35,7 +35,7 @@ async def read_subscriptions(
         
     return subs
 
-@router.get("/report", response_model=schemas.AllCategoriesReport)
+@router.get("/reports/summary", response_model=schemas.AllCategoriesReport)
 async def get_full_expenses_report(
     db: DBSession,
     current_user: CurUser,
@@ -66,31 +66,42 @@ async def get_full_expenses_report(
         "categories": categories_stats
     }
     
-@router.get("/report/{category}", response_model=schemas.CategoryReport)
+@router.get("/reports/{category}", response_model=schemas.CategoryReport)
 async def get_category_expenses_report(
     category: str,
     db: DBSession,
     current_user: CurUser,
     rates: Rates
 ):
-    subs = crud.get_user_subscriptions(db=db, user_id=current_user.id)
+    subs = crud.get_user_subscriptions_by_category(db=db, user_id=current_user.id, category=category)
     
-    filtered_subs = []
     total_monthly = 0.0
     
     for sub in subs:
-        if sub.category == category:
-            sub.price_rub = convert_to_rub(sub.price, sub.currency, rates)
-            total_monthly += sub.price_rub
-            filtered_subs.append(sub)
+        sub.price_rub = convert_to_rub(sub.price, sub.currency, rates)
+        total_monthly += sub.price_rub
     
     return {
         "category": category,
-        "services": filtered_subs,
+        "services": subs,
         "total_monthly": round(total_monthly, 2)
     }
     
-@router.patch("/{sub_id}", response_model=schemas.SubscriptionRead)
+@router.get("/average/{category}")
+def get_average_by_category(
+    category: str,
+    db: DBSession,
+    rates: Rates,
+    _: CurUser # Оставляем авторизацию, чтобы только авторизованные пользователи могли делать запросы
+):
+    avg_price = crud.get_category_average(db, category, rates)
+    
+    return {
+        "category": category,
+        "average_price_rub": avg_price
+    }
+
+@router.patch("/update/{sub_id}", response_model=schemas.SubscriptionRead)
 def update_subscription_route(
     sub_id: int,
     update_data: schemas.SubscriptionUpdate,
@@ -106,7 +117,7 @@ def update_subscription_route(
     )
     
     if not db_sub:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+        raise HTTPException(status_code=404, detail="Subscription not found or access denied.")
     
     db_sub.price_rub = convert_to_rub(db_sub.price, db_sub.currency, rates)
     return db_sub
