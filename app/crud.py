@@ -112,7 +112,3 @@ def create_user(db: Session, user: UserCreate):
 def get_user_by_email(db: Session, email: str):
     query = select(User).where(User.email == email)
     return db.execute(query).scalar_one_or_none()
-
-def get_user_by_nickname(db: Session, name: str):
-    query = select(User).where(User.name == name)
-    return db.execute(query).scalar_one_or_none()

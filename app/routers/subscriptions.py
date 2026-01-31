@@ -15,10 +15,14 @@ Rates = Annotated[dict, Depends(get_rates)]
 def create_subscription(
     subscription: schemas.SubscriptionCreate,
     current_user: CurUser,
-    db: DBSession
+    db: DBSession,
+    rates: Rates
 ):
     try:
-        return crud.create_subscription(db=db, subscription=subscription, user_id=current_user.id)
+        db_sub = crud.create_subscription(db=db, subscription=subscription, user_id=current_user.id)
+        db_sub.price_rub = convert_to_rub(db_sub.price, db_sub.currency, rates)
+        return db_sub
+    
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

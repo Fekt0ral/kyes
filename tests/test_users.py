@@ -157,25 +157,22 @@ def test_register_duplicate_nickname(client):
         "name": "SuperUser" # Дубль
     })
     
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Nickname already taken"
+    assert response.status_code == 200
 
 def test_login_success(client):
-    # 1. Сначала регистрируем
     email = "login@example.com"
-    password = "MySuperPassword1!"
+    password = "CorrectPassword1!"
+    # Регистрируем пользователя
     client.post("/auth/register", json={
         "email": email,
         "password": password,
         "name": "Login User"
     })
     
-    # 2. Пытаемся залогиниться
-    # Обрати внимание: OAuth2PasswordRequestForm требует отправки данных как form-data,
-    # поэтому используем data=..., а не json=...
-    # И поле называется username, даже если мы передаем email (специфика OAuth2)
+    # Пытаемся войти. 
+    # ВАЖНО: Ключ остается "username", но значение теперь — email
     login_data = {
-        "username": "Login User", # У тебя логин по name (get_user_by_nickname)
+        "username": email, 
         "password": password
     }
     
@@ -183,27 +180,27 @@ def test_login_success(client):
     
     assert response.status_code == 200
     token_data = response.json()
-    
-    # Проверяем структуру токена
     assert "access_token" in token_data
     assert token_data["token_type"] == "bearer"
 
 def test_login_wrong_password(client):
-    # Регистрируем
+    email = "wrong@example.com"
     client.post("/auth/register", json={
-        "email": "wrong@example.com",
+        "email": email,
         "password": "CorrectPassword1!",
         "name": "WrongPassUser"
     })
     
-    # Ломимся с неправильным паролем
+    # Ломимся с неправильным паролем, используя email
     response = client.post("/auth/login", data={
-        "username": "WrongPassUser",
+        "username": email,
         "password": "WrongPassword1!" 
     })
     
     assert response.status_code == 401
-    assert "Incorrect username or password" in response.json()["detail"]
+    # Проверь, чтобы текст ошибки в response.json()["detail"] 
+    # совпадал с тем, что ты написал в routers/users.py
+    assert "Incorrect email or password" in response.json()["detail"]
     
 def test_password_hashing():
     password = "SecretPassword1!"
