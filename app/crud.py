@@ -25,6 +25,13 @@ def get_user_subscriptions(db: Session, user_id: int):
     query = select(Subscription).where(Subscription.user_id == user_id)
     return db.execute(query).scalars().all()
 
+def check_subscription_exists(db: Session, user_id: int, service_name: str):
+    query = select(Subscription).where(
+        Subscription.user_id == user_id,
+        Subscription.service_name == service_name
+    )
+    return db.execute(query).scalars().all()
+
 def get_user_subscriptions_by_category(db: Session, user_id: int, category: str):
     query = select(Subscription).where(
         Subscription.user_id == user_id,

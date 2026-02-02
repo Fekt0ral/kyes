@@ -5,11 +5,14 @@ import re
 
 # Subscription Schemas
 class SubscriptionBase(BaseModel):
+    model_config = {"extra": "forbid"}
+    
     service_name: str = Field(...)
     price: float = Field(..., gt=0)
     currency: Literal["RUB", "USD", "EUR"] = "RUB"
     next_payment: date
     category: Optional[str] = None
+    link: Optional[str] = None
     
     @classmethod
     def _validate_service_name(cls, v: str):
@@ -31,6 +34,18 @@ class SubscriptionBase(BaseModel):
             raise ValueError("Category must be between 2 and 50 characters long.")
         return category
     
+    @classmethod
+    def _validate_link(cls, v: Optional[str]):
+        if v is not None:
+            link = v.strip()
+            if not link:
+                return None
+            pattern = r'^https?://[^\s/$.?#].[^\s]*$'
+            if not re.match(pattern, link):
+                raise ValueError("Invalid URL format")
+            return link
+        return None
+    
     @field_validator("service_name")
     @classmethod
     def validate_service_name(cls, v: str):
@@ -45,6 +60,11 @@ class SubscriptionBase(BaseModel):
     @classmethod
     def validate_category(cls, v: Optional[str]):
         return cls._validate_category(v) if v else v
+    
+    @field_validator("link")
+    @classmethod
+    def validate_link(cls, v: Optional[str]):
+        return cls._validate_link(v) if v else v
 
 class SubscriptionCreate(SubscriptionBase):
     pass
@@ -60,6 +80,7 @@ class SubscriptionUpdate(BaseModel):
     currency: Optional[Literal["RUB", "USD", "EUR"]] = None
     next_payment: Optional[date] = None
     category: Optional[str] = None
+    link: Optional[str] = None
     
     @field_validator("service_name")
     @classmethod
@@ -75,6 +96,11 @@ class SubscriptionUpdate(BaseModel):
     @classmethod
     def validate_category(cls, v: Optional[str]):
         return SubscriptionBase._validate_category(v) if v else v
+    
+    @field_validator("link")
+    @classmethod
+    def validate_link(cls, v: Optional[str]):
+        return SubscriptionBase._validate_link(v) if v else v
     
 class CategoryStat(BaseModel):
     category: str
@@ -95,6 +121,11 @@ class SubscriptionDelete(BaseModel):
     id: int
     service_name: str
     model_config = {"from_attributes": True}
+    
+class DuplicateWarning(BaseModel):
+    warning: str
+    existing_subscriptions: List[SubscriptionRead]
+    message: str = "Subscription with this name already exists. Use force=true to create anyway."
     
 # User Schemas
 class UserCreate(BaseModel):

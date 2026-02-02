@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Annotated, List
+from typing import Annotated, List, Union
 from ..database import get_db
 from ..currency import get_rates, convert_to_rub
 from .. import schemas, models, crud, security
@@ -11,13 +11,35 @@ CurUser = Annotated[models.User, Depends(security.get_current_user)]
 DBSession = Annotated[Session, Depends(get_db)]
 Rates = Annotated[dict, Depends(get_rates)]
 
-@router.post("/", response_model=schemas.SubscriptionRead)
+@router.post("/", response_model=schemas.SubscriptionRead, status_code=201)
 def create_subscription(
     subscription: schemas.SubscriptionCreate,
     current_user: CurUser,
     db: DBSession,
-    rates: Rates
+    rates: Rates,
+    force: bool = Query(False, description="Force creation even if subscription already exists")
 ):
+    existing = crud.check_subscription_exists(
+        db=db, 
+        user_id=current_user.id, 
+        service_name=subscription.service_name
+    )
+    
+    if existing and not force:
+        for sub in existing:
+            sub.price_rub = convert_to_rub(sub.price, sub.currency, rates)
+        
+        warning_response = schemas.DuplicateWarning(
+            warning="duplicate_subscription",
+            message=f"Subscription '{subscription.service_name}' already exists. Use force=true to create anyway.",
+            existing_subscriptions=existing
+        )
+        
+        raise HTTPException(
+            status_code=409,
+            detail=warning_response.model_dump(mode="json")
+        )
+    
     try:
         db_sub = crud.create_subscription(db=db, subscription=subscription, user_id=current_user.id)
         db_sub.price_rub = convert_to_rub(db_sub.price, db_sub.currency, rates)

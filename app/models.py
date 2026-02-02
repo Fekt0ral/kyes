@@ -20,9 +20,10 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True)
     service_name = Column(String, nullable=False)
     price = Column(Float, nullable=False)
-    currency = Column(String, nullable=False, default="Rub")
+    currency = Column(String, nullable=False, default="RUB")
     next_payment = Column(Date, nullable=False)
     category = Column(String, nullable=True)
+    link = Column(String, nullable=True)
     
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="subscriptions")
