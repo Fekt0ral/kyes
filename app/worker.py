@@ -4,6 +4,10 @@ from .database import SessionLocal
 from .models import Subscription, User
 from datetime import date, timedelta
 from sqlalchemy import select
+from .logger import get_logger, setup_logging
+
+setup_logging()
+logger = get_logger(__name__)
 
 celery_app = Celery(
     "worker",
@@ -35,7 +39,10 @@ def check_subscriptions_reminder():
             user = result.scalars().first()
             
             if user:
-                print(f"Notifying user {user.name} about subscription {sub.service_name} due on tomorrow.")
+                logger.info(
+                    "Уведомление о предстоящем платеже",
+                    extra={"user_id": user.id, "sub_id": sub.id, "service_name": sub.service_name}
+                )
                 # Здесь позже вызовем функцию отправки в Telegram
     finally:
         db.close()

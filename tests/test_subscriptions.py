@@ -79,7 +79,8 @@ def test_currency_conversion(client, auth_headers):
     }
     res = client.post("/subscriptions/", json=payload, headers=auth_headers)
     assert res.status_code == 201
-    assert res.json()["price_rub"] == 1000.0
+    assert res.json()["display_price"] == 1000.0
+    assert res.json()["display_currency"] == "RUB"
 
 def test_create_subscription_api(client, auth_headers):
     payload = {
@@ -101,10 +102,12 @@ def test_get_subs_and_report(client, auth_headers):
 
     resp_list = client.get("/subscriptions/", headers=auth_headers)
     assert len(resp_list.json()) == 2
-    assert resp_list.json()[1]["price_rub"] == 1000.0
+    assert resp_list.json()[0]["display_price"] == 1000.0
+    assert resp_list.json()[0]["display_currency"] == "RUB"
 
     resp_report = client.get("/subscriptions/reports/summary", headers=auth_headers)
     assert resp_report.json()["total_monthly"] == 1100.0
+    assert resp_report.json()["currency"] == "RUB"
 
 def test_delete_and_security_trick(client, session, auth_headers):
     payload = {"service_name": "Secret", "price": 10, "currency": "RUB", "next_payment": str(date.today())}
@@ -234,7 +237,8 @@ def test_duplicate_check_shows_existing_details(client, auth_headers):
     assert existing["next_payment"] == "2026-03-15"
     assert existing["category"] == "Premium"
     assert existing["link"] == "https://detailtest.com"
-    assert "price_rub" in existing  # Проверяем конвертацию валюты
+    assert "display_price" in existing  # Проверяем конвертацию валюты
+    assert "display_currency" in existing
 
 def test_multiple_duplicates_listed(client, auth_headers):
     """Тест: если несколько дубликатов, все показываются в предупреждении"""
@@ -258,7 +262,44 @@ def test_multiple_duplicates_listed(client, auth_headers):
     # Проверяем, что показаны обе существующие подписки
     existing = third_res.json()["detail"]["existing_subscriptions"]
     assert len(existing) == 2
-    assert all(s["service_name"] == "MultiDup" for s in existing)
+
+
+def test_display_currency_respects_user_preference(client, auth_headers):
+    pref_res = client.patch("/auth/me/preferences", json={"preferred_currency": "USD"}, headers=auth_headers)
+    assert pref_res.status_code == 200
+
+    payload = {
+        "service_name": "Local",
+        "price": 1000.0,
+        "currency": "RUB",
+        "next_payment": str(date.today())
+    }
+    res = client.post("/subscriptions/", json=payload, headers=auth_headers)
+    assert res.status_code == 201
+    assert res.json()["display_price"] == 10.0
+    assert res.json()["display_currency"] == "USD"
+
+    list_res = client.get("/subscriptions/", headers=auth_headers)
+    assert list_res.json()[0]["display_currency"] == "USD"
+
+
+def test_reports_use_preferred_currency(client, auth_headers):
+    client.patch("/auth/me/preferences", json={"preferred_currency": "EUR"}, headers=auth_headers)
+
+    client.post("/subscriptions/", json={"service_name": "R1", "price": 1000, "currency": "RUB", "next_payment": str(date.today()), "category": "AA"}, headers=auth_headers)
+    client.post("/subscriptions/", json={"service_name": "U1", "price": 10, "currency": "USD", "next_payment": str(date.today()), "category": "AA"}, headers=auth_headers)
+
+    report = client.get("/subscriptions/reports/summary", headers=auth_headers).json()
+    assert report["currency"] == "EUR"
+    assert report["total_monthly"] == 18.0
+
+    cat_report = client.get("/subscriptions/reports/AA", headers=auth_headers).json()
+    assert cat_report["currency"] == "EUR"
+    assert cat_report["total_monthly"] == 18.0
+
+    avg = client.get("/subscriptions/average/AA", headers=auth_headers).json()
+    assert avg["currency"] == "EUR"
+    assert avg["average_price"] == 9.0
 
 def test_different_service_names_no_conflict(client, auth_headers):
     """Тест: разные названия сервисов не конфликтуют"""

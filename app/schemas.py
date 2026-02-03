@@ -3,13 +3,16 @@ from datetime import date
 from typing import List, Literal, Optional
 import re
 
+# Shared types
+Currency = Literal["RUB", "USD", "EUR"]
+
 # Subscription Schemas
 class SubscriptionBase(BaseModel):
     model_config = {"extra": "forbid"}
     
     service_name: str = Field(...)
     price: float = Field(..., gt=0)
-    currency: Literal["RUB", "USD", "EUR"] = "RUB"
+    currency: Currency = "RUB"
     next_payment: date
     category: Optional[str] = None
     link: Optional[str] = None
@@ -71,13 +74,14 @@ class SubscriptionCreate(SubscriptionBase):
 
 class SubscriptionRead(SubscriptionBase):
     id: int
-    price_rub: float = 0.0
+    display_price: float = 0.0
+    display_currency: Currency = "RUB"
     model_config = {"from_attributes": True}
     
 class SubscriptionUpdate(BaseModel):
     service_name: Optional[str] = None
     price: Optional[float] = Field(None, gt=0)
-    currency: Optional[Literal["RUB", "USD", "EUR"]] = None
+    currency: Optional[Currency] = None
     next_payment: Optional[date] = None
     category: Optional[str] = None
     link: Optional[str] = None
@@ -109,10 +113,12 @@ class CategoryStat(BaseModel):
 
 class CategoryReport(BaseModel):
     category: str
+    currency: Currency = "RUB"
     total_monthly: float
     services: List[SubscriptionRead]
 
 class AllCategoriesReport(BaseModel):
+    currency: Currency = "RUB"
     total_monthly: float
     categories: List[CategoryStat]
     model_config = {"from_attributes": True}
@@ -132,6 +138,7 @@ class UserCreate(BaseModel):
     email: str
     password: str
     name: str 
+    preferred_currency: Currency = "RUB"
 
     @field_validator("email")
     @classmethod
@@ -172,7 +179,32 @@ class UserRead(BaseModel):
     id: int
     email: str
     name: str
+    preferred_currency: Currency = "RUB"
     model_config = {"from_attributes": True}
+
+class UserPreferencesUpdate(BaseModel):
+    preferred_currency: Currency
+
+class UserUpdate(BaseModel):
+    email: Optional[str] = None
+    name: Optional[str] = None
+    password: Optional[str] = None
+    current_password: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]):
+        return UserCreate.validate_email(v) if v else v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: Optional[str]):
+        return UserCreate.validate_password(v) if v else v
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: Optional[str]):
+        return UserCreate.validate_name(v) if v else v
 
 class Token(BaseModel):
     access_token: str

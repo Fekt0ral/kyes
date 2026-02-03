@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
-from .currency import convert_to_rub
+from .currency import convert_price
 from .models import Subscription, User
 from .schemas import SubscriptionCreate, UserCreate, SubscriptionUpdate
 from .security import get_password_hash
@@ -57,7 +57,7 @@ def update_subscription(db: Session, sub_id: int, user_id: int, update_data: Sub
     
     return None
 
-def get_category_average(db: Session, category: str, rates: dict):
+def get_category_average(db: Session, category: str, rates: dict, target_currency: str):
     query = select(Subscription).where(Subscription.category == category)
     subs = db.execute(query).scalars().all()
 
@@ -66,8 +66,7 @@ def get_category_average(db: Session, category: str, rates: dict):
 
     total_sum = 0.0
     for sub in subs:
-        price_in_rub = convert_to_rub(sub.price, sub.currency, rates)
-        total_sum += price_in_rub
+        total_sum += convert_price(sub.price, sub.currency, target_currency, rates)
 
     return round(total_sum / len(subs), 2)
 
@@ -109,13 +108,61 @@ def create_user(db: Session, user: UserCreate):
     db_user = User(
         email=user.email, 
         hashed_password=hashed_password,
-        name=user.name
+        name=user.name,
+        preferred_currency=user.preferred_currency
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
     return db_user
 
+def update_user_preferred_currency(db: Session, user_id: int, preferred_currency: str):
+    query = select(User).where(User.id == user_id)
+    db_user = db.execute(query).scalar_one_or_none()
+    if not db_user:
+        return None
+    db_user.preferred_currency = preferred_currency
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def update_user_fields(
+    db: Session,
+    user_id: int,
+    email: str = None,
+    name: str = None,
+    hashed_password: str = None,
+    password_changed_at = None,
+    last_email_change = None,
+    last_name_change = None,
+    last_password_change = None
+):
+    query = select(User).where(User.id == user_id)
+    db_user = db.execute(query).scalar_one_or_none()
+    if not db_user:
+        return None
+    if email is not None:
+        db_user.email = email
+    if name is not None:
+        db_user.name = name
+    if hashed_password is not None:
+        db_user.hashed_password = hashed_password
+    if password_changed_at is not None:
+        db_user.password_changed_at = password_changed_at
+    if last_email_change is not None:
+        db_user.last_email_change = last_email_change
+    if last_name_change is not None:
+        db_user.last_name_change = last_name_change
+    if last_password_change is not None:
+        db_user.last_password_change = last_password_change
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
 def get_user_by_email(db: Session, email: str):
     query = select(User).where(User.email == email)
+    return db.execute(query).scalar_one_or_none()
+
+def get_user_by_id(db: Session, user_id: int):
+    query = select(User).where(User.id == user_id)
     return db.execute(query).scalar_one_or_none()

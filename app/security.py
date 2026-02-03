@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import time
 from jose import jwt
 from pwdlib import PasswordHash
 from config import settings
@@ -12,6 +13,13 @@ from . import crud
 password_hash = PasswordHash.recommended()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+def _to_utc_timestamp(dt: datetime) -> float:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.timestamp()
+
 def get_password_hash(password: str) -> str:
     return password_hash.hash(password)
 
@@ -21,7 +29,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    to_encode.update({"exp": expire})
+    issued_at = time.time()
+    to_encode.update({"exp": expire, "iat": issued_at})
     encoded_jwt = jwt.encode(
         to_encode, 
         settings.secret_key.get_secret_value(),
@@ -33,19 +42,24 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials"
-    )
     try:
         payload = jwt.decode(token, settings.secret_key.get_secret_value(), algorithms=[settings.algorithm])
-        email: str = payload.get("sub")
-        if email is None:
-            raise credentials_exception
+        sub = payload.get("sub")
+        if sub is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject")
+        try:
+            user_id = int(sub)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+        issued_at = payload.get("iat")
     except JWTError:
-        raise credentials_exception
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token is invalid or expired")
         
-    user = crud.get_user_by_email(db, email=email)
+    user = crud.get_user_by_id(db, user_id=user_id)
     if user is None:
-        raise credentials_exception
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if issued_at is not None and user.password_changed_at:
+        changed_at_ts = _to_utc_timestamp(user.password_changed_at)
+        if changed_at_ts > float(issued_at):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalidated by password change")
     return user
