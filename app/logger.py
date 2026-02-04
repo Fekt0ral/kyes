@@ -1,14 +1,12 @@
 import logging
-import os
+from config import settings
 import sys
 
-_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
-
 def setup_logging() -> None:
-    level = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = settings.log_level.upper()
     logging.basicConfig(
         level=level,
-        format=_LOG_FORMAT,
+        format=settings.log_format,
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 

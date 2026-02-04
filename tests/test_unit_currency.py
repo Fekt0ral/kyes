@@ -1,5 +1,3 @@
-import pytest
-
 from app.currency import convert_price
 
 

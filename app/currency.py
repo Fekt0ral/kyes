@@ -4,8 +4,6 @@ from fastapi import HTTPException
 from config import settings
 from .logger import get_logger
 
-BASE_URL = "https://open.er-api.com/v6/latest/RUB"
-
 _rates_cache = None
 _last_update = 0
 logger = get_logger(__name__)
@@ -20,7 +18,7 @@ async def get_rates():
 
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(BASE_URL)
+            response = await client.get(settings.currency_api_url)
             response.raise_for_status()
             data = response.json()
             
@@ -34,11 +32,6 @@ async def get_rates():
                 return _rates_cache
             logger.exception("Не удалось получить курсы валют")
             raise HTTPException(status_code=503, detail="Сервис валют недоступен")
-
-def convert_to_rub(price: float, currency: str, rates: dict) -> float:
-    curr = currency.upper()
-    rate = rates.get(curr, 1.0)
-    return round(price / rate, 2)
 
 def convert_price(price: float, from_currency: str, to_currency: str, rates: dict) -> float:
     from_curr = from_currency.upper()

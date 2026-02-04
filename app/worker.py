@@ -5,14 +5,15 @@ from .models import Subscription, User
 from datetime import date, timedelta
 from sqlalchemy import select
 from .logger import get_logger, setup_logging
+from ..config import settings
 
 setup_logging()
 logger = get_logger(__name__)
 
 celery_app = Celery(
     "worker",
-    broker=f"redis://localhost:6379/0",
-    backend=f"redis://localhost:6379/0"
+    broker=settings.celery_broker_url,
+    backend=settings.redis_url
 )
 
 celery_app.conf.beat_schedule = {
