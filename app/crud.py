@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from .currency import convert_price
-from .models import Subscription, User
+from .models import Subscription, User, RefreshToken
 from .schemas import SubscriptionCreate, UserCreate, SubscriptionUpdate
 from .security import get_password_hash
 
@@ -189,3 +189,47 @@ def get_user_by_email(db: Session, email: str):
 def get_user_by_id(db: Session, user_id: int):
     query = select(User).where(User.id == user_id)
     return db.execute(query).scalar_one_or_none()
+
+def create_refresh_token(db: Session, user_id: int, token_hash: str, expires_at):
+    try:
+        db_token = RefreshToken(
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at
+        )
+        db.add(db_token)
+        db.commit()
+        db.refresh(db_token)
+        return db_token
+    except Exception:
+        db.rollback()
+        raise
+
+def get_refresh_token_by_hash(db: Session, token_hash: str):
+    query = select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+    return db.execute(query).scalar_one_or_none()
+
+def revoke_refresh_token(db: Session, token: RefreshToken, revoked_at):
+    try:
+        token.revoked_at = revoked_at
+        db.commit()
+        db.refresh(token)
+        return token
+    except Exception:
+        db.rollback()
+        raise
+
+def revoke_user_refresh_tokens(db: Session, user_id: int, revoked_at):
+    try:
+        query = select(RefreshToken).where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None)
+        )
+        tokens = db.execute(query).scalars().all()
+        for token in tokens:
+            token.revoked_at = revoked_at
+        db.commit()
+        return tokens
+    except Exception:
+        db.rollback()
+        raise

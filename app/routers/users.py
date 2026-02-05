@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timedelta, timezone
+import hashlib
 from typing import Annotated
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 from ..database import get_db
 from .. import schemas, crud, security, models
 from ..logger import get_logger
+from config import settings
 
 router = APIRouter(prefix="/auth", tags=["users"])
 logger = get_logger(__name__)
@@ -38,8 +40,11 @@ def login(
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 
     access_token = security.create_access_token(data={"sub": str(user.id)})
+    refresh_token, token_hash = security.generate_refresh_token()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
+    crud.create_refresh_token(db=db, user_id=user.id, token_hash=token_hash, expires_at=expires_at)
     logger.info("Пользователь вошел в систему", extra={"user_id": user.id, "email": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "refresh_token": refresh_token}
 
 @router.get("/me", response_model=schemas.UserRead)
 def read_me(current_user: CurUser):
@@ -122,6 +127,7 @@ def update_me(
         hashed_password = security.get_password_hash(update_data.password)
         last_password_change = now
         password_changed_at = now
+        crud.revoke_user_refresh_tokens(db=db, user_id=current_user.id, revoked_at=now)
 
     if not any([email_to_set, name_to_set, hashed_password]):
         raise HTTPException(status_code=400, detail="No changes to update")
@@ -150,3 +156,54 @@ def update_me(
         }
     )
     return db_user
+
+@router.post("/refresh", response_model=schemas.Token)
+def refresh_token(
+    body: schemas.RefreshTokenRequest,
+    db: DBSession
+):
+    def _to_naive_utc(dt: datetime):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+    token_hash = hashlib.sha256(body.refresh_token.encode("utf-8")).hexdigest()
+    db_token = crud.get_refresh_token_by_hash(db, token_hash)
+    if not db_token:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    if db_token.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="Refresh token revoked")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if db_token.expires_at <= now:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+
+    user = crud.get_user_by_id(db, db_token.user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    pwd_changed_at = _to_naive_utc(user.password_changed_at)
+    created_at = _to_naive_utc(db_token.created_at)
+    if pwd_changed_at and created_at and created_at < pwd_changed_at:
+        crud.revoke_refresh_token(db, db_token, now)
+        raise HTTPException(status_code=401, detail="Refresh token invalidated by password change")
+
+    crud.revoke_refresh_token(db, db_token, now)
+    access_token = security.create_access_token(data={"sub": str(user.id)})
+    new_refresh_token, new_hash = security.generate_refresh_token()
+    expires_at = now + timedelta(days=settings.refresh_token_expire_days)
+    crud.create_refresh_token(db=db, user_id=user.id, token_hash=new_hash, expires_at=expires_at)
+    return {"access_token": access_token, "token_type": "bearer", "refresh_token": new_refresh_token}
+
+@router.post("/logout")
+def logout(
+    body: schemas.RefreshTokenRequest,
+    db: DBSession
+):
+    token_hash = hashlib.sha256(body.refresh_token.encode("utf-8")).hexdigest()
+    db_token = crud.get_refresh_token_by_hash(db, token_hash)
+    if not db_token:
+        return {"detail": "ok"}
+    if db_token.revoked_at is None:
+        crud.revoke_refresh_token(db, db_token, datetime.now(timezone.utc).replace(tzinfo=None))
+    return {"detail": "ok"}

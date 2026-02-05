@@ -209,3 +209,7 @@ class UserUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: str | None = None
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str

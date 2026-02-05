@@ -19,6 +19,7 @@ class User(Base):
     last_password_change = Column(DateTime, nullable=True)
 
     subscriptions = relationship("Subscription", back_populates="owner")
+    refresh_tokens = relationship("RefreshToken", back_populates="owner", cascade="all, delete-orphan")
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
@@ -33,3 +34,15 @@ class Subscription(Base):
     
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="subscriptions")
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    owner = relationship("User", back_populates="refresh_tokens")

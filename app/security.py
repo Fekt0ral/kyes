@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import time
+import secrets
+import hashlib
 from jose import jwt
 from pwdlib import PasswordHash
 from config import settings
@@ -37,6 +39,11 @@ def create_access_token(data: dict):
         algorithm=settings.algorithm
     )
     return encoded_jwt
+
+def generate_refresh_token() -> tuple[str, str]:
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return token, token_hash
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
