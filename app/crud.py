@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from .currency import convert_price
-from .models import Subscription, User, RefreshToken
+from .models import Subscription, User, RefreshToken, SupportMessage, TelegramLinkToken
 from .schemas import SubscriptionCreate, UserCreate, SubscriptionUpdate
 from .security import get_password_hash
 
@@ -113,7 +113,7 @@ def get_user_expenses_by_all_categories(db: Session, user_id: int):
     return [{"category": row[0], "category_sum": row[1]} for row in result]
 
 # User CRUD operations
-def create_user(db: Session, user: UserCreate):
+def create_user(db: Session, user: UserCreate, email_verified: bool = True):
     try:
         hashed_password = get_password_hash(user.password)
         
@@ -121,7 +121,26 @@ def create_user(db: Session, user: UserCreate):
             email=user.email, 
             hashed_password=hashed_password,
             name=user.name,
-            preferred_currency=user.preferred_currency
+            preferred_currency=user.preferred_currency,
+            email_verified=email_verified
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except Exception:
+        db.rollback()
+        raise
+
+def create_user_telegram(db: Session, name: str, password: str):
+    try:
+        hashed_password = get_password_hash(password)
+        db_user = User(
+            email=None,
+            hashed_password=hashed_password,
+            name=name,
+            preferred_currency="RUB",
+            email_verified=False
         )
         db.add(db_user)
         db.commit()
@@ -154,7 +173,8 @@ def update_user_fields(
     password_changed_at = None,
     last_email_change = None,
     last_name_change = None,
-    last_password_change = None
+    last_password_change = None,
+    email_verified: bool | None = None
 ):
     query = select(User).where(User.id == user_id)
     db_user = db.execute(query).scalar_one_or_none()
@@ -175,6 +195,8 @@ def update_user_fields(
             db_user.last_name_change = last_name_change
         if last_password_change is not None:
             db_user.last_password_change = last_password_change
+        if email_verified is not None:
+            db_user.email_verified = email_verified
         db.commit()
         db.refresh(db_user)
         return db_user
@@ -189,6 +211,25 @@ def get_user_by_email(db: Session, email: str):
 def get_user_by_id(db: Session, user_id: int):
     query = select(User).where(User.id == user_id)
     return db.execute(query).scalar_one_or_none()
+
+def get_user_by_telegram_id(db: Session, telegram_id: str):
+    query = select(User).where(User.telegram_id == telegram_id)
+    return db.execute(query).scalar_one_or_none()
+
+def update_user_telegram(db: Session, user_id: int, telegram_id: str, telegram_chat_id: str):
+    query = select(User).where(User.id == user_id)
+    db_user = db.execute(query).scalar_one_or_none()
+    if not db_user:
+        return None
+    try:
+        db_user.telegram_id = telegram_id
+        db_user.telegram_chat_id = telegram_chat_id
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+    except Exception:
+        db.rollback()
+        raise
 
 def create_refresh_token(db: Session, user_id: int, token_hash: str, expires_at):
     try:
@@ -230,6 +271,59 @@ def revoke_user_refresh_tokens(db: Session, user_id: int, revoked_at):
             token.revoked_at = revoked_at
         db.commit()
         return tokens
+    except Exception:
+        db.rollback()
+        raise
+
+def create_support_message(db: Session, user_id: int | None, message: str):
+    try:
+        db_msg = SupportMessage(user_id=user_id, message=message)
+        db.add(db_msg)
+        db.commit()
+        db.refresh(db_msg)
+        return db_msg
+    except Exception:
+        db.rollback()
+        raise
+
+def create_telegram_link_token(db: Session, user_id: int, token_hash: str, expires_at):
+    try:
+        db_token = TelegramLinkToken(
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at
+        )
+        db.add(db_token)
+        db.commit()
+        db.refresh(db_token)
+        return db_token
+    except Exception:
+        db.rollback()
+        raise
+
+def get_telegram_link_token_by_hash(db: Session, token_hash: str):
+    query = select(TelegramLinkToken).where(TelegramLinkToken.token_hash == token_hash)
+    return db.execute(query).scalar_one_or_none()
+
+def mark_telegram_link_token_used(db: Session, token: TelegramLinkToken, used_at):
+    try:
+        token.used_at = used_at
+        db.commit()
+        db.refresh(token)
+        return token
+    except Exception:
+        db.rollback()
+        raise
+
+def delete_user(db: Session, user_id: int):
+    try:
+        db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
+        db.execute(delete(TelegramLinkToken).where(TelegramLinkToken.user_id == user_id))
+        db.execute(delete(SupportMessage).where(SupportMessage.user_id == user_id))
+        db.execute(delete(Subscription).where(Subscription.user_id == user_id))
+        db.execute(delete(User).where(User.id == user_id))
+        db.commit()
+        return True
     except Exception:
         db.rollback()
         raise

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timedelta, timezone
 import hashlib
+import secrets
 from typing import Annotated
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
@@ -69,6 +70,15 @@ def update_preferences(
         extra={"user_id": current_user.id, "preferred_currency": update_data.preferred_currency}
     )
     return db_user
+
+@router.delete("/me")
+def delete_me(
+    current_user: CurUser,
+    db: DBSession
+):
+    crud.delete_user(db, current_user.id)
+    logger.info("Пользователь удалил профиль", extra={"user_id": current_user.id})
+    return {"detail": "ok"}
 
 @router.patch("/me", response_model=schemas.UserRead)
 def update_me(
@@ -141,7 +151,8 @@ def update_me(
         password_changed_at=password_changed_at,
         last_email_change=last_email_change,
         last_name_change=last_name_change,
-        last_password_change=last_password_change
+        last_password_change=last_password_change,
+        email_verified=True if email_to_set else None
     )
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -207,3 +218,24 @@ def logout(
     if db_token.revoked_at is None:
         crud.revoke_refresh_token(db, db_token, datetime.now(timezone.utc).replace(tzinfo=None))
     return {"detail": "ok"}
+
+@router.post("/telegram/link")
+def create_telegram_link(
+    current_user: CurUser,
+    db: DBSession
+):
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    expires_at = now + timedelta(minutes=settings.telegram_link_token_ttl_minutes)
+    crud.create_telegram_link_token(db=db, user_id=current_user.id, token_hash=token_hash, expires_at=expires_at)
+
+    url = None
+    if settings.telegram_bot_username:
+        url = f"https://t.me/{settings.telegram_bot_username}?start={token}"
+
+    return {
+        "token": token,
+        "url": url,
+        "expires_at": expires_at.isoformat()
+    }

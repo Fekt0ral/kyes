@@ -4,4 +4,6 @@ http://127.0.0.1:8000/docs
 celery -A app.worker.celery_app worker --loglevel=info
 celery -A app.worker.celery_app beat --loglevel=info
 
+python3 app/telegram_bot.py
+
 python3 -m pytest tests/ -v

@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     cache_ttl: int = 600
     rate_limit_login_per_min: int = 10
     rate_limit_profile_per_day: int = 5
+    telegram_support_chat_id: str | None = None
+    telegram_bot_username: str | None = None
+    telegram_link_token_ttl_minutes: int = 10
     
     log_level: str = "INFO"
     log_format: str = "%(asctime)s %(levelname)s %(name)s %(message)s"

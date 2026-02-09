@@ -177,9 +177,10 @@ class UserCreate(BaseModel):
 
 class UserRead(BaseModel):
     id: int
-    email: str
+    email: Optional[str] = None
     name: str
     preferred_currency: Currency = "RUB"
+    email_verified: bool = False
     model_config = {"from_attributes": True}
 
 class UserPreferencesUpdate(BaseModel):

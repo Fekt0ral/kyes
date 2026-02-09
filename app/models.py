@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, Date, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, Date, DateTime, Boolean
 from datetime import datetime, timezone
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -10,16 +10,21 @@ class User(Base):
     
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
+    email = Column(String, unique=True, nullable=True)
+    email_verified = Column(Boolean, nullable=False, default=False)
     hashed_password = Column(String, nullable=False)
     preferred_currency = Column(String, nullable=False, default="RUB")
-    password_changed_at = Column(DateTime, nullable=False, default=datetime.now(timezone.utc))
+    password_changed_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     last_email_change = Column(DateTime, nullable=True)
     last_name_change = Column(DateTime, nullable=True)
     last_password_change = Column(DateTime, nullable=True)
+    telegram_id = Column(String, unique=True, nullable=True)
+    telegram_chat_id = Column(String, nullable=True)
 
     subscriptions = relationship("Subscription", back_populates="owner")
     refresh_tokens = relationship("RefreshToken", back_populates="owner", cascade="all, delete-orphan")
+    support_messages = relationship("SupportMessage", back_populates="owner", cascade="all, delete-orphan")
+    telegram_link_tokens = relationship("TelegramLinkToken", back_populates="owner", cascade="all, delete-orphan")
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
@@ -40,9 +45,31 @@ class RefreshToken(Base):
 
     id = Column(Integer, primary_key=True)
     token_hash = Column(String, nullable=False, unique=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     expires_at = Column(DateTime, nullable=False)
     revoked_at = Column(DateTime, nullable=True)
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="refresh_tokens")
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+
+    id = Column(Integer, primary_key=True)
+    message = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    owner = relationship("User", back_populates="support_messages")
+
+class TelegramLinkToken(Base):
+    __tablename__ = "telegram_link_tokens"
+
+    id = Column(Integer, primary_key=True)
+    token_hash = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    owner = relationship("User", back_populates="telegram_link_tokens")
